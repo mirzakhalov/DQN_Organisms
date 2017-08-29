@@ -58,8 +58,14 @@ class DQN(object):
                     'b_conv4':tf.Variable(tf.random_normal([64])),
                     'b_fc':tf.Variable(tf.random_normal([1024])),
                     'out':tf.Variable(tf.random_normal([self.N_ACTIONS]))}
+        
+        self.e_pred = self.DQN_eval(self.x)
+        self.prediction = self.DQN_target(self.x)
+        self.cost = tf.reduce_mean(tf.squared_difference(self.prediction, self.target))
+        self.optimizer = tf.train.AdamOptimizer(self.LR).minimize(self.cost)
 
         self.saver = tf.train.Saver()
+        self.sess.run(tf.global_variables_initializer())
         
 
     def conv2d(self,x, W):
@@ -125,10 +131,9 @@ class DQN(object):
             copy.append(self.eval_biases[layer].assign(self.target_biases[layer]))
 
         for c in range(len(copy)):
-            sess.run(copy[c])
+            self.sess.run(copy[c])
 
     def choose_action(self,s):
-        self.e_pred = self.DQN_eval(self.x)
         state = [np.array([s]).flatten()]
         if np.random.uniform() <= self.EPSILON:
             actions_value = sess.run(self.e_pred,feed_dict={self.x: state})
@@ -138,10 +143,6 @@ class DQN(object):
         return action
 
     def train(self):
-        self.e_pred = self.DQN_eval(self.x)
-        self.prediction = self.DQN_target(self.x)
-        self.cost = tf.reduce_mean(tf.squared_difference(self.prediction, self.target))
-        self.optimizer = tf.train.AdamOptimizer(self.LR).minimize(self.cost)
         for i in range(self.BATCH_SIZE):
             MEM = random.choice(self.MEMORY)
             s1 = [np.array([MEM[0]]).flatten()]
@@ -152,8 +153,7 @@ class DQN(object):
 
             Rmax = MEM[2] + self.GAMMA * np.argmax(Qvals[0])
             new_target[0][MEM[1]] = Rmax
-
-            self.optimizer.run(feed_dict={self.x: s1, target: new_target, keep_prob: 0.8})
+            self.sess.run(self.optimizer,feed_dict={self.x: s1, self.target: new_target, self.keep_prob: 0.8})
 
     def remember(self, mem):
         if len(self.MEMORY) < self.MEMORY_CAPACITY:
@@ -167,40 +167,38 @@ class DQN(object):
 
 if __name__ == '__main__':
     agent = DQN()
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        status = input("#: ")
-        if(status == "load"):
-            agent.saver.restore(sess, "save/model.ckpt")
-            print("Model restored")
+    status = input("#: ")
+    if(status == "load"):
+        agent.saver.restore(agent.sess, "save/model.ckpt")
+        print("Model restored")
 
-        for i_episode in range(agent.RUN_TIME):
-            observation = agent.env.reset()
-            t = 0
-            score = 0
-            while(1):
-                t = t + 1
-                agent.env.render()
-                s = observation
-                a = agent.choose_action(s)
-                observation, reward, done, info = agent.env.step(a)
-                if reward == 1:
-                    reward = 100
-                reward = reward + math.log10(t)/10
+    for i_episode in range(agent.RUN_TIME):
+        observation = agent.env.reset()
+        t = 0
+        score = 0
+        while(1):
+            t = t + 1
+            agent.env.render()
+            s = observation
+            a = agent.choose_action(s)
+            observation, reward, done, info = agent.env.step(a)
+            if reward == 1:
+                reward = 100
+            reward = reward + math.log10(t)/10
 
-                agent.remember([s, a, reward, observation])
+            agent.remember([s, a, reward, observation])
 
-                score = score + reward
+            score = score + reward
 
-                if done:
-                    print("Run {} - Episode finished after {} timesteps".format(i_episode,t+1))
-                    print("Score: ", score)
-                    break
-            agent.train()
-            if i_episode % TARGET_REPLACE_ITER == 0:
-                print("Updating Weights")
-                agent.update_weights()
-                agent.saver.save(sess, "save/model.ckpt")
-                print("Model saved")
+            if done:
+                print("Run {} - Episode finished after {} timesteps".format(i_episode,t+1))
+                print("Score: ", score)
+                break
+        agent.train()
+        if i_episode % agent.TARGET_REPLACE_ITER == 0:
+            print("Updating Weights")
+            agent.update_weights()
+            agent.saver.save(agent.sess, "save/model.ckpt")
+            print("Model saved")
 
 
