@@ -6,24 +6,25 @@ import math
 
 class QN(object):
     def __init__(self):
-        tf.set_random_seed(3)
-        np.random.seed(3)
+        tf.set_random_seed(1)
+        np.random.seed(1)
 
         self.sess = tf.Session()
 
         # Hyper Parameters
         self.BATCH_SIZE = 32
-        self.LR = 1e-4                   # learning rate
-        self.EPSILON = 0.8               # greedy policy
-        self.GAMMA = 0.995                 # reward discount
-        self.TARGET_REPLACE_ITER = 5  # target update frequency
-        self.MEMORY_CAPACITY = 128
+        self.LR = 0.01                   # learning rate
+        self.EPSILON = 0.9               # greedy policy
+        self.GAMMA = 0.9                 # reward discount
+        self.TARGET_REPLACE_ITER = 100  # target update frequency
+        self.MEMORY_CAPACITY = 2000
         self.MEMORY_COUNTER = 0          # for store experience
         self.RUN_TIME = 200000
         self.env = gym.make('CartPole-v1')
+        self.env = self.env.unwrapped
         self.N_STATES = 4
-        self.L1_NODES = 20
-        self.L2_NODES = 20
+        self.L1_NODES = 10
+        self.L2_NODES = 10
         self.N_ACTIONS = 2
         self.MEMORY = []     # initialize memory
 
@@ -55,7 +56,7 @@ class QN(object):
         self.e_pred = self.DQN_eval(self.x)
         self.prediction = self.DQN_target(self.x)
         self.cost = tf.reduce_mean(tf.squared_difference(self.prediction, self.target))
-        self.optimizer = tf.train.AdamOptimizer(self.LR).minimize(self.cost)
+        self.optimizer = tf.train.RMSPropOptimizer(self.LR).minimize(self.cost)
         
         self.saver = tf.train.Saver()
         self.sess.run(tf.global_variables_initializer())
@@ -64,10 +65,7 @@ class QN(object):
         x = tf.reshape(x, shape=[-1, self.N_STATES])
 
         fc1 = tf.nn.sigmoid(tf.matmul(x, self.eval_weights['W_fc1']) + self.eval_biases['b_fc1'])
-        fc1 = tf.nn.dropout(fc1, self.keep_rate)
-
         fc2 = tf.nn.sigmoid(tf.matmul(fc1, self.eval_weights['W_fc2']) + self.eval_biases['b_fc2'])
-        fc2 = tf.nn.dropout(fc2, self.keep_rate)
 
         output = tf.matmul(fc2, self.eval_weights['out']) + self.eval_biases['out']
 
@@ -77,10 +75,7 @@ class QN(object):
         x = tf.reshape(x, shape=[-1, self.N_STATES])
 
         fc1 = tf.nn.sigmoid(tf.matmul(x, self.eval_weights['W_fc1']) + self.eval_biases['b_fc1'])
-        fc1 = tf.nn.dropout(fc1, self.keep_rate)
-
         fc2 = tf.nn.sigmoid(tf.matmul(fc1, self.eval_weights['W_fc2']) + self.eval_biases['b_fc2'])
-        fc2 = tf.nn.dropout(fc2, self.keep_rate)
 
         output = tf.matmul(fc2, self.eval_weights['out']) + self.eval_biases['out']
 
@@ -129,37 +124,3 @@ class QN(object):
                 self.MEMORY_CAPACITY = self.MEMORY_CAPACITY + 1
             else:
                 self.MEMORY_CAPACITY = 0
-
-if __name__ == '__main__':
-    agent = QN()
-    status = input("#: ")
-    if(status == "load"):
-        #agent.saver.restore(sess, "save/model.ckpt")
-        print("Model restored")
-
-    for i_episode in range(agent.RUN_TIME):
-        observation = agent.env.reset()
-        t = 0
-        score = 0
-        while(1):
-            t = t + 1
-            agent.env.render()
-            s = observation
-            a = agent.choose_action(s)
-            observation, reward, done, info = agent.env.step(a)
-
-            agent.remember([s, a, reward, observation])
-            score = score + reward
-
-            if done:
-                print("Run {} - Episode finished after {} timesteps".format(i_episode,t+1))
-                print("Score: ", score)
-                break
-        agent.train()
-        if i_episode % agent.TARGET_REPLACE_ITER == 0:
-            print("Updating Weights")
-            agent.update_weights()
-            #agent.saver.save(agent.sess, "save/model.ckpt")
-            print("Model saved")
-
-
